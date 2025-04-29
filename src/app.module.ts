@@ -7,6 +7,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { ResponseInterceptor } from './modules/common/interceptors/response.interceptor';
 import { HttpExceptionFilter } from './modules/common/interceptors/http-exception.filter';
+import { HttpModule } from '@nestjs/axios';
+import { PoolMonitoringModule } from './modules/pool-monitoring/pool-monitoring.module';
 
 @Module({
   imports: [
@@ -29,6 +31,8 @@ import { HttpExceptionFilter } from './modules/common/interceptors/http-exceptio
       }),
     }),
     UserModule,
+    PoolMonitoringModule,
+  
   ],
   controllers: [AppController],
   providers: [

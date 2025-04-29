@@ -2,9 +2,9 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateUserConfigDto } from './dtos/create-user-config.dto';
-import { Wallet } from './entity/wallet.entity';
+import { Wallet } from './entities/wallet.entity';
 import { generateSolanaWallet } from '../common/utils/solana-wallet';
-import { UserConfig } from './entity/user-config.entity';
+import { UserConfig } from './entities/user-config.entity';
 
 @Injectable()
 export class UserService {

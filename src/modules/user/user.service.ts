@@ -23,9 +23,13 @@ export class UserService {
     const userIsExist = await this.userIsExist(createUserConfigDto.publicKey);
     if (!userIsExist) {
       this.logger.error('[saveConfig] User already exists');
-      throw new BadRequestException('Wallet not found. Please generate wallet first.');
+      throw new BadRequestException(
+        'Wallet not found. Please generate wallet first.',
+      );
     }
     const userConfig = this.userConfigRepository.create(createUserConfigDto);
+    userConfig.priceRange =
+      createUserConfigDto.maxPrice - createUserConfigDto.minPrice;
     return await this.userConfigRepository.save(userConfig);
   }
 

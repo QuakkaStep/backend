@@ -6,7 +6,7 @@ import { PoolStats } from './entities/pool-stats.entity';
 export class PoolMonitoringController {
   constructor(private readonly poolMonitoringService: PoolMonitoringService) {}
 
-  @Get('/latest-stat')
+  @Get('/latest-state')
   async getLatestStat(): Promise<PoolStats> {
     return this.poolMonitoringService.getLatestStat();
   }

@@ -12,9 +12,6 @@ export class CreateUserConfigDto {
   addLiquidityAmount: number;
 
   @IsDecimal()
-  priceRange: number;
-
-  @IsDecimal()
   minPrice: number;
 
   @IsDecimal()

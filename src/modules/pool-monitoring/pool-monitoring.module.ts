@@ -6,6 +6,7 @@ import { PoolStats } from './entities/pool-stats.entity';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PoolMonitoringTaskService } from './pool-monitoring.task.service';
 import { HttpModule } from '@nestjs/axios';
+import { RaydiumApiService } from 'src/services/raydium.api.service';
 
 @Module({
   imports: [
@@ -17,6 +18,10 @@ import { HttpModule } from '@nestjs/axios';
     }),
   ],
   controllers: [PoolMonitoringController],
-  providers: [PoolMonitoringService, PoolMonitoringTaskService],
+  providers: [
+    PoolMonitoringService,
+    PoolMonitoringTaskService,
+    RaydiumApiService,
+  ],
 })
 export class PoolMonitoringModule {}

@@ -8,7 +8,7 @@ export class PoolMonitoringTaskService {
 
   constructor(private readonly poolMonitoringService: PoolMonitoringService) {}
 
-  @Interval(1000 * 10)
+  @Interval(1000 * 5)
   async handleCron() {
     this.logger.log('Running scheduled task to fetch pool stats...');
     await this.poolMonitoringService.fetchAndSavePoolStats();

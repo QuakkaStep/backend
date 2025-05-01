@@ -12,6 +12,7 @@ import { ConfigService } from '@nestjs/config';
 import { fromSmallestUnit, toSmallestUnit } from 'src/shared/utils';
 import Decimal from 'decimal.js';
 import { BN } from 'bn.js';
+import { ComputeLiquidityResult, createDefaultLiquidityResult } from './type';
 
 @Injectable()
 export class RaydiumClmmService {
@@ -44,7 +45,7 @@ export class RaydiumClmmService {
     inputAmount: number,
     startPrice: number,
     endPrice: number,
-    poolId: string = 'GQsPr4RJk9AZkkfWHud7v4MtotcxhaYzZHdsPCg9vNvW',
+    poolId: string = 'GQsPr4RJk9AZkkfWHud7v4MtotcxhaYzZHdsPCg9vNvW', // trump/wsol
     inputMint: string = '6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN', // trump
     slippage = 10,
     maxIterations = 10,
@@ -67,6 +68,10 @@ export class RaydiumClmmService {
     });
 
     const isInputA = poolInfo.mintA.toString() === inputMint;
+    const inputTokenDecimals = isInputA
+      ? poolInfo.mintA.decimals
+      : poolInfo.mintB.decimals;
+
     const { tick: lowerTick } = TickUtils.getPriceAndTick({
       poolInfo,
       price: new Decimal(startPrice),
@@ -84,7 +89,7 @@ export class RaydiumClmmService {
     let inputAmountRaw = toSmallestUnit(inputAmount, 6);
     let left = 0;
     let right = inputAmountRaw;
-    let bestResult;
+    let bestResult: ComputeLiquidityResult = createDefaultLiquidityResult();
 
     // Binary search to find the optimal split between swap and liquidity input
     for (let i = 0; i < maxIterations; i++) {
@@ -92,12 +97,8 @@ export class RaydiumClmmService {
       const swapAmount = mid;
       const remainAmount = inputAmountRaw - swapAmount;
 
-      this.logger.log(`Iteration ${i + 1}:
-        - swapAmount: ${swapAmount.toString()}
-        - remainAmount: ${remainAmount.toString()}`);
-
       // Step 1: Estimate how much SOL can be obtained by swapping part of TRUMP
-      const { amountOut: solFromSwap } = PoolUtils.computeAmountOutFormat({
+      const swapRes = PoolUtils.computeAmountOutFormat({
         poolInfo: clmmPoolInfo,
         tickArrayCache: tickCache[poolId],
         amountIn: new BN(swapAmount.toString()),
@@ -105,6 +106,47 @@ export class RaydiumClmmService {
         slippage,
         epochInfo,
       });
+
+      if (!swapRes.allTrade) {
+        this.logger.error(
+          '[Swap] Not all tokens can be traded. Adjust input or pool liquidity.',
+        );
+        throw new Error('Swap failed: not all input tokens can be traded.');
+      }
+
+      const inputTokenAmount = fromSmallestUnit(
+        swapRes.realAmountIn.amount.raw.toNumber(),
+        inputTokenDecimals,
+      );
+      const inputTokenFee = fromSmallestUnit(
+        swapRes.fee.raw.toNumber(),
+        inputTokenDecimals,
+      );
+
+      const outputSolAmount = fromSmallestUnit(
+        swapRes.amountOut.amount.raw.toNumber(),
+        9,
+      );
+
+      this.logger.log(`[Swap] Swap Result:
+      - Real Amount In: ${inputTokenAmount}
+      - Swap Fee: ${inputTokenFee} // token (eg. TRUMP)
+      - Amount Out (SOL): ${outputSolAmount}
+      - Min Amount Out: ${fromSmallestUnit(swapRes.minAmountOut.amount.raw.toNumber(), 9)}
+      - Execution Price: ${swapRes.executionPrice.toFixed()}
+      - Price Impact: ${swapRes.priceImpact.toFixed()}%
+      `);
+
+      const swapSol = fromSmallestUnit(
+        swapRes.amountOut.amount.raw.toNumber(),
+        9,
+      );
+
+      bestResult.swap = {
+        inputTokenAmount,
+        inputTokenFee,
+        outputSolAmount,
+      };
 
       // Step 2: Estimate how much liquidity can be added with the remaining TRUMP and swapped SOL
       const liquidityAmountOutInfo =
@@ -120,31 +162,42 @@ export class RaydiumClmmService {
           epochInfo,
         });
 
-      const targetWsol = fromSmallestUnit(
+      const solAmount = fromSmallestUnit(
         liquidityAmountOutInfo.amountA.amount.toNumber(),
         9,
       );
-      const targetTrump = fromSmallestUnit(
+      const solFeeAmount = liquidityAmountOutInfo.amountA.fee
+        ? fromSmallestUnit(liquidityAmountOutInfo.amountA.fee.toNumber(), 9)
+        : 0;
+      const tokenAmount = fromSmallestUnit(
         liquidityAmountOutInfo.amountB.amount.toNumber(),
         6,
       );
-      const swapSol = fromSmallestUnit(solFromSwap.amount.raw.toNumber(), 9);
+      const tokenFeeAmount = liquidityAmountOutInfo.amountB.fee
+        ? fromSmallestUnit(liquidityAmountOutInfo.amountB.fee.toNumber(), 6)
+        : 0;
 
-      this.logger.log(
-        `target Wsol: ${targetWsol}, target Trump: ${targetTrump}, Swap Sol: ${swapSol}`,
-      );
+      this.logger.log(`[Liquidity] Add Liquidity Result:
+          - Liquidity (BN): ${liquidityAmountOutInfo.liquidity.toString()}
+          - Sol amount: ${solAmount}
+            - Fee: ${solFeeAmount}
+          - Token Amount: ${tokenAmount}
+            - Fee: ${tokenFeeAmount}
+        `);
+
+      bestResult.addLiquidity = {
+        solAmount,
+        tokenAmount,
+        solFee: solFeeAmount,
+        tokenFee: tokenFeeAmount,
+      };
 
       // Step 3: Check if the swap SOL is within tolerance of the required liquidity SOL
-      if (Math.abs(swapSol - targetWsol) <= tolerance) {
-        bestResult = {
-          solAmount: targetWsol,
-          trumpAmount: targetTrump,
-        };
+      if (swapSol > solAmount && Math.abs(swapSol - solAmount) <= tolerance) {
         break;
       }
 
-      // Adjust binary search bounds based on whether we need more or less SOL
-      if (swapSol < targetWsol) {
+      if (swapSol < solAmount) {
         left = mid;
       } else {
         right = mid;
@@ -152,7 +205,6 @@ export class RaydiumClmmService {
     }
 
     if (!bestResult) {
-      this.logger.error('Failed to find suitable liquidity ratio');
       throw new Error('failed to find suitable liquidity ratio');
     }
 

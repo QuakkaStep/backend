@@ -3,8 +3,9 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateUserConfigDto } from './dtos/create-user-config.dto';
 import { Wallet } from './entities/wallet.entity';
-import { generateSolanaWallet } from '../common/utils/solana-wallet';
+import { generateSolanaWallet, SOL_MINT, TRUMP_MINT } from '../common/utils';
 import { UserConfig } from './entities/user-config.entity';
+import { WalletBalance } from './entities/wallet-balance.entity';
 
 @Injectable()
 export class UserService {
@@ -15,6 +16,8 @@ export class UserService {
     private readonly userConfigRepository: Repository<UserConfig>,
     @InjectRepository(Wallet)
     private readonly walletRepo: Repository<Wallet>,
+    @InjectRepository(WalletBalance)
+    private readonly walletBalanceRepo: Repository<WalletBalance>,
   ) {}
 
   async saveConfig(
@@ -36,7 +39,25 @@ export class UserService {
   async generateWallet() {
     const { publicKey, secretKey } = generateSolanaWallet();
     this.logger.log(`[generateWallet] Generated wallet: ${publicKey}`);
+
+    // 保存钱包
     await this.walletRepo.save({ publicKey, secretKey });
+
+    // 初始化钱包余额（1 SOL, 100 TRUMP）
+    const solBalance = this.walletBalanceRepo.create({
+      owner: publicKey,
+      tokenMint: SOL_MINT,
+      balance: 1,
+    });
+
+    const trumpBalance = this.walletBalanceRepo.create({
+      owner: publicKey,
+      tokenMint: TRUMP_MINT,
+      balance: 100,
+    });
+
+    await this.walletBalanceRepo.save([solBalance, trumpBalance]);
+
     return {
       publicKey,
       secretKey,
@@ -51,5 +72,65 @@ export class UserService {
     });
 
     return userIsExist;
+  }
+
+  async updateWalletBalance(
+    publicKey: string,
+    tokenMint: string,
+    newBalance: number,
+  ): Promise<WalletBalance> {
+    const wallet = await this.walletRepo.findOne({ where: { publicKey } });
+    if (!wallet) {
+      throw new BadRequestException('Wallet not found');
+    }
+
+    let balanceRecord = await this.walletBalanceRepo.findOne({
+      where: {
+        owner: publicKey,
+        tokenMint,
+      },
+    });
+
+    if (balanceRecord) {
+      balanceRecord.balance = newBalance;
+    } else {
+      balanceRecord = this.walletBalanceRepo.create({
+        owner: publicKey,
+        tokenMint,
+        balance: newBalance,
+      });
+    }
+
+    return this.walletBalanceRepo.save(balanceRecord);
+  }
+
+  async getBalanceByToken(
+    publicKey: string,
+    tokenMint: string,
+  ): Promise<number> {
+    const balanceRecord = await this.walletBalanceRepo.findOne({
+      where: {
+        owner: publicKey,
+        tokenMint,
+      },
+    });
+
+    if (!balanceRecord) {
+      throw new BadRequestException('Wallet or token balance not found.');
+    }
+
+    return Number(balanceRecord.balance);
+  }
+
+  async getAllTokenBalances(publicKey: string): Promise<WalletBalance[]> {
+    const balances = await this.walletBalanceRepo.find({
+      where: { owner: publicKey },
+    });
+
+    if (!balances || balances.length === 0) {
+      throw new BadRequestException('No token balances found for this wallet.');
+    }
+
+    return balances;
   }
 }

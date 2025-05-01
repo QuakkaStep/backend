@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserConfigDto } from './dtos/create-user-config.dto';
 
@@ -14,5 +14,10 @@ export class UserController {
   @Get('generate-wallet')
   async generateWallet() {
     return this.userService.generateWallet();
+  }
+
+  @Get('portfolio')
+  async getWalletTokenHold(@Query('publicKey') publicKey: string) {
+    return this.userService.getAllTokenBalances(publicKey);
   }
 }

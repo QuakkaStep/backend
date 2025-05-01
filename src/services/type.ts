@@ -46,3 +46,35 @@ export namespace Raydium {
     [mint: string]: number; // mint 地址对应的价格
   };
 }
+
+export interface ComputeLiquidityResult {
+  swap: {
+    inputTokenAmount: number;
+    inputTokenFee: number;
+    outputSolAmount: number;
+  };
+  addLiquidity: {
+    solAmount: number;
+    tokenAmount: number;
+    solFee: number;
+    tokenFee: number;
+  };
+}
+
+export function createDefaultLiquidityResult(): ComputeLiquidityResult {
+  return {
+    swap: {
+      inputTokenAmount: 0,
+      inputTokenFee: 0,
+      outputSolAmount: 0,
+    },
+    addLiquidity: {
+      solAmount: 0,
+      tokenAmount: 0,
+      solFee: 0,
+      tokenFee: 0,
+    },
+  };
+}
+
+

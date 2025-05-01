@@ -9,6 +9,7 @@ import { ResponseInterceptor } from './modules/common/interceptors/response.inte
 import { HttpExceptionFilter } from './modules/common/interceptors/http-exception.filter';
 import { HttpModule } from '@nestjs/axios';
 import { PoolMonitoringModule } from './modules/pool-monitoring/pool-monitoring.module';
+import { LiquidityModule } from './modules/liquidity/liquidity.module';
 
 @Module({
   imports: [
@@ -30,9 +31,9 @@ import { PoolMonitoringModule } from './modules/pool-monitoring/pool-monitoring.
         logging: false,
       }),
     }),
-    UserModule,
-    PoolMonitoringModule,
-  
+    // UserModule,
+    // PoolMonitoringModule,
+    LiquidityModule,
   ],
   controllers: [AppController],
   providers: [

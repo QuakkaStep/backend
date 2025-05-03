@@ -9,6 +9,9 @@ export class PoolStats {
   poolId: string;
 
   @Column('decimal', { precision: 20, scale: 4 })
+  price: number;
+
+  @Column('decimal', { precision: 20, scale: 4 })
   liquidity: number; // TVL
 
   @Column('decimal', { precision: 20, scale: 4 })

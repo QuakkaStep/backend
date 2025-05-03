@@ -6,6 +6,7 @@ import { Wallet } from './entities/wallet.entity';
 import { generateSolanaWallet, SOL_MINT, TRUMP_MINT } from '../common/utils';
 import { UserConfig } from './entities/user-config.entity';
 import { WalletBalance } from './entities/wallet-balance.entity';
+import { LiquidityService } from '../liquidity/liquidity.service';
 
 @Injectable()
 export class UserService {
@@ -18,11 +19,10 @@ export class UserService {
     private readonly walletRepo: Repository<Wallet>,
     @InjectRepository(WalletBalance)
     private readonly walletBalanceRepo: Repository<WalletBalance>,
+    private readonly liquidityService: LiquidityService,
   ) {}
 
-  async saveConfig(
-    createUserConfigDto: CreateUserConfigDto,
-  ): Promise<UserConfig> {
+  async saveConfig(createUserConfigDto: CreateUserConfigDto) {
     const userIsExist = await this.userIsExist(createUserConfigDto.publicKey);
     if (!userIsExist) {
       this.logger.error('[saveConfig] User already exists');
@@ -33,17 +33,18 @@ export class UserService {
     const userConfig = this.userConfigRepository.create(createUserConfigDto);
     userConfig.priceRange =
       createUserConfigDto.maxPrice - createUserConfigDto.minPrice;
-    return await this.userConfigRepository.save(userConfig);
+    await this.userConfigRepository.save(userConfig);
+    return this.liquidityService.increaseSingleSidedLiquidity(
+      createUserConfigDto.publicKey,
+    );
   }
 
   async generateWallet() {
     const { publicKey, secretKey } = generateSolanaWallet();
     this.logger.log(`[generateWallet] Generated wallet: ${publicKey}`);
 
-    // 保存钱包
     await this.walletRepo.save({ publicKey, secretKey });
 
-    // 初始化钱包余额（1 SOL, 100 TRUMP）
     const solBalance = this.walletBalanceRepo.create({
       owner: publicKey,
       tokenMint: SOL_MINT,

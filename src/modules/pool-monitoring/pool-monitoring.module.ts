@@ -11,7 +11,6 @@ import { RaydiumApiService } from 'src/services/raydium.api.service';
 @Module({
   imports: [
     TypeOrmModule.forFeature([PoolStats]),
-    ScheduleModule.forRoot(),
     HttpModule.register({
       timeout: 5000,
       maxRedirects: 5,

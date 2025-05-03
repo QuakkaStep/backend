@@ -9,4 +9,12 @@ export class LiquidityController {
   async getLiquidityPreview(@Query('publicKey') publicKey: string) {
     return this.liquidityService.increaseSingleSidedLiquidity(publicKey);
   }
+
+  @Get('history')
+  async getHistory(
+    @Query('publicKey') publicKey: string,
+    @Query('limit') limit: number = 20,
+  ) {
+    return this.liquidityService.getLiquidityHistory(publicKey, limit);
+  }
 }

@@ -1,4 +1,10 @@
-import { IsInt, IsDecimal, IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import {
+  IsInt,
+  IsDecimal,
+  IsEnum,
+  IsNotEmpty,
+  IsString,
+} from 'class-validator';
 
 export class CreateUserConfigDto {
   @IsNotEmpty()

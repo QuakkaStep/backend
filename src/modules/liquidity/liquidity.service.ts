@@ -1,5 +1,5 @@
 // src/modules/liquidity/liquidity.service.ts
-import { Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PublicKey } from '@solana/web3.js';
@@ -10,17 +10,95 @@ import { UserService } from '../user/user.service';
 import { UserConfig } from '../user/entities/user-config.entity';
 import { SOL_MINT, TRUMP_MINT } from '../common/utils';
 import { ComputeLiquidityResult } from 'src/services/type';
+import { PoolStats } from '../pool-monitoring/entities/pool-stats.entity';
+import { LiquidityHistory } from './entities/liquidity-history.entity';
 
 @Injectable()
 export class LiquidityService {
   private readonly logger = new Logger(LiquidityService.name);
+  private readonly trumpSolPoolId: string;
 
   constructor(
     @InjectRepository(UserConfig)
     private readonly userConfigRepository: Repository<UserConfig>,
+    @InjectRepository(PoolStats)
+    private readonly poolStatsRepository: Repository<PoolStats>,
+    @InjectRepository(LiquidityHistory)
+    private readonly liquidityHistoryRepository: Repository<LiquidityHistory>,
     private readonly raydiumClmmService: RaydiumClmmService,
+    @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.trumpSolPoolId = this.configService.get<string>(
+      'POOL_ID',
+      'GQsPr4RJk9AZkkfWHud7v4MtotcxhaYzZHdsPCg9vNvW',
+    );
+  }
+
+  async getLiquidityHistory(publicKey: string, limit = 20) {
+    return this.liquidityHistoryRepository.find({
+      where: { publicKey },
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
+  }
+
+  async checkAndTriggerAutoLiquidity() {
+    const activeUsers = await this.userConfigRepository.find({
+      where: { status: 'active' },
+    });
+    if (activeUsers.length === 0) return;
+
+    const latestStats = await this.poolStatsRepository.find({
+      where: { poolId: this.trumpSolPoolId },
+      order: { createdAt: 'DESC' },
+      take: 1,
+    });
+    const currentPrice = latestStats[0]?.price;
+    if (!currentPrice) return;
+
+    for (const userConfig of activeUsers) {
+      const {
+        publicKey,
+        stepPercentage,
+        triggeredPrice,
+        addLiquidityAmount,
+        minPrice,
+        maxPrice,
+      } = userConfig;
+
+      const upThreshold = triggeredPrice * (1 + stepPercentage / 100);
+      const downThreshold = triggeredPrice * (1 - stepPercentage / 100);
+
+      this.logger.debug(
+        `Checking liquidity for ${publicKey} at price ${currentPrice}, stepPercentage: ${stepPercentage}, triggeredPrice: ${triggeredPrice}`,
+      );
+
+      this.logger.debug(
+        `upThreshold: ${upThreshold}, downThreshold: ${downThreshold}`,
+      );
+
+      if (currentPrice >= upThreshold || currentPrice <= downThreshold) {
+        const res = await this.increaseSingleSidedLiquidity(publicKey);
+
+        userConfig.triggeredPrice = currentPrice;
+        await this.userConfigRepository.save(userConfig);
+
+        await this.liquidityHistoryRepository.save({
+          publicKey,
+          price: currentPrice,
+          solAmount: res.addLiquidity.solAmount,
+          tokenAmount: res.addLiquidity.tokenAmount,
+          swapTokenAmount: res.swap.inputTokenAmount,
+          minPrice,
+          maxPrice,
+        });
+
+        this.logger.log(`[Auto LP] ✅ ${publicKey} at ${currentPrice}`);
+      }
+    }
+  }
 
   async increaseSingleSidedLiquidity(publicKey: string) {
     // fetch the user's config

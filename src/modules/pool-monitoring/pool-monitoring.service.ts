@@ -22,6 +22,7 @@ export class PoolMonitoringService {
       const poolInfo = await this.raydiumApiService.fetchPoolInfo();
 
       const newStats = this.poolStatsRepository.create({
+        price: poolInfo.price,
         poolId: poolInfo.id,
         liquidity: poolInfo.tvl,
         volume24h: poolInfo.day.volumeQuote,
@@ -29,10 +30,6 @@ export class PoolMonitoringService {
       });
 
       await this.poolStatsRepository.save(newStats);
-      this.logger.log(
-        'New pool stats saved.',
-        JSON.stringify(newStats, null, 2),
-      );
     } catch (error) {
       this.logger.error('Error fetching or saving pool stats', error);
     }

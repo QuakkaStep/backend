@@ -10,9 +10,11 @@ import { HttpExceptionFilter } from './modules/common/interceptors/http-exceptio
 import { HttpModule } from '@nestjs/axios';
 import { PoolMonitoringModule } from './modules/pool-monitoring/pool-monitoring.module';
 import { LiquidityModule } from './modules/liquidity/liquidity.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
     }),

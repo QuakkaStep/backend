@@ -10,8 +10,8 @@ import { UserService } from '../user/user.service';
 import { UserConfig } from '../user/entities/user-config.entity';
 import { SOL_MINT, TRUMP_MINT } from '../common/utils';
 import { ComputeLiquidityResult } from 'src/services/type';
-import { PoolStats } from '../pool-monitoring/entities/pool-stats.entity';
 import { LiquidityHistory } from './entities/liquidity-history.entity';
+import { PoolMonitoringService } from '../pool-monitoring/pool-monitoring.service';
 
 @Injectable()
 export class LiquidityService {
@@ -21,10 +21,10 @@ export class LiquidityService {
   constructor(
     @InjectRepository(UserConfig)
     private readonly userConfigRepository: Repository<UserConfig>,
-    @InjectRepository(PoolStats)
-    private readonly poolStatsRepository: Repository<PoolStats>,
+
     @InjectRepository(LiquidityHistory)
     private readonly liquidityHistoryRepository: Repository<LiquidityHistory>,
+    private readonly poolMonitoringService: PoolMonitoringService,
     private readonly raydiumClmmService: RaydiumClmmService,
     @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
@@ -50,12 +50,7 @@ export class LiquidityService {
     });
     if (activeUsers.length === 0) return;
 
-    const latestStats = await this.poolStatsRepository.find({
-      where: { poolId: this.trumpSolPoolId },
-      order: { createdAt: 'DESC' },
-      take: 1,
-    });
-    const currentPrice = latestStats[0]?.price;
+    const currentPrice = await this.poolMonitoringService.getCurrentPrice(this.trumpSolPoolId);
     if (!currentPrice) return;
 
     for (const userConfig of activeUsers) {

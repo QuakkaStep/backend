@@ -8,7 +8,7 @@ import { UserConfig } from '../user/entities/user-config.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LiquidityHistory } from './entities/liquidity-history.entity';
 import { LiquidityTaskService } from './task.service';
-import { PoolStats } from '../pool-monitoring/entities/pool-stats.entity';
+import { PoolMonitoringModule } from '../pool-monitoring/pool-monitoring.module';
 
 @Module({
   imports: [
@@ -16,9 +16,9 @@ import { PoolStats } from '../pool-monitoring/entities/pool-stats.entity';
       WalletBalance,
       UserConfig,
       LiquidityHistory,
-      PoolStats,
     ]),
     forwardRef(() => UserModule),
+    PoolMonitoringModule
   ],
   controllers: [LiquidityController],
   providers: [LiquidityService, RaydiumClmmService, LiquidityTaskService],

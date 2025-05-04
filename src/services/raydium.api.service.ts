@@ -44,9 +44,9 @@ export class RaydiumApiService {
     );
   }
 
-  async fetchPoolInfo(): Promise<Raydium.PoolInfo> {
+  async fetchPoolInfo(poolId: string): Promise<Raydium.PoolInfo> {
     try {
-      const url = `${this.raydiumApiUrl}${this.poolInfoEndpoint}?ids=${this.trumpSolPoolId}`;
+      const url = `${this.raydiumApiUrl}${this.poolInfoEndpoint}?ids=${poolId}`;
       const response = await firstValueFrom(this.httpService.get(url));
       const poolInfo = response.data.data[0]; // 只取第一个池子
       if (!poolInfo) {

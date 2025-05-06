@@ -12,6 +12,9 @@ import { SOL_MINT, TRUMP_MINT } from '../common/utils';
 import { ComputeLiquidityResult } from 'src/services/type';
 import { LiquidityHistory } from './entities/liquidity-history.entity';
 import { PoolMonitoringService } from '../pool-monitoring/pool-monitoring.service';
+import { ElizaAgentService } from 'src/services/eliza-agent.service';
+import { fromSmallestUnit } from 'src/shared/utils';
+import { ConfigResponseDto } from './dtos/config-response.dto';
 
 @Injectable()
 export class LiquidityService {
@@ -21,7 +24,6 @@ export class LiquidityService {
   constructor(
     @InjectRepository(UserConfig)
     private readonly userConfigRepository: Repository<UserConfig>,
-
     @InjectRepository(LiquidityHistory)
     private readonly liquidityHistoryRepository: Repository<LiquidityHistory>,
     private readonly poolMonitoringService: PoolMonitoringService,
@@ -29,6 +31,7 @@ export class LiquidityService {
     @Inject(forwardRef(() => UserService))
     private readonly userService: UserService,
     private readonly configService: ConfigService,
+    private readonly elizaAgentService: ElizaAgentService,
   ) {
     this.trumpSolPoolId = this.configService.get<string>(
       'POOL_ID',
@@ -50,7 +53,9 @@ export class LiquidityService {
     });
     if (activeUsers.length === 0) return;
 
-    const currentPrice = await this.poolMonitoringService.getCurrentPrice(this.trumpSolPoolId);
+    const currentPrice = await this.poolMonitoringService.getCurrentPrice(
+      this.trumpSolPoolId,
+    );
     if (!currentPrice) return;
 
     for (const userConfig of activeUsers) {
@@ -165,5 +170,26 @@ export class LiquidityService {
     this.logger.debug(
       `Updated wallet balance: SOL ${newSolBalance}, TRUMP ${newTrumpBalance}`,
     );
+  }
+
+  async getAiConfigRecommender(publicKey: string): Promise<ConfigResponseDto> {
+    const tokenAmount = await this.userService.getBalanceByToken(
+      publicKey,
+      TRUMP_MINT,
+    );
+
+    this.logger.debug(`[getAiConfigRecommender] Token amount: ${tokenAmount}`);
+
+    const recommendedConfig = await this.elizaAgentService.sendMessageToAgent(
+      tokenAmount,
+      'TRUMP',
+    );
+
+    return {
+      walletAddress: publicKey,
+      tokenAmount: tokenAmount,
+      tokenSymbol: 'TRUMP',
+      ...recommendedConfig,
+    };
   }
 }

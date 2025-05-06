@@ -102,3 +102,33 @@ export function createDefaultLiquidityResult(): ComputeLiquidityResult {
 }
 
 
+
+export namespace Elizaos{
+  export interface Agent {
+    id: string;
+    name: string;
+    clients: string[];
+  }
+  
+  export interface AgentResponse {
+    agents: Agent[];
+  }
+  
+  export interface CLMMConfig {
+    stepPercentage: number;
+    addLiquidityAmount: number;
+    minPrice: number;
+    maxPrice: number;
+  }
+
+  export interface ElizaResponseItem {
+    user?: string;
+    text: string;
+    action?: string;
+    content?: {
+      config?: CLMMConfig;
+    };
+  }
+}
+
+

@@ -9,19 +9,23 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { LiquidityHistory } from './entities/liquidity-history.entity';
 import { LiquidityTaskService } from './task.service';
 import { PoolMonitoringModule } from '../pool-monitoring/pool-monitoring.module';
+import { ElizaAgentService } from 'src/services/eliza-agent.service';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      WalletBalance,
-      UserConfig,
-      LiquidityHistory,
-    ]),
+  
+    TypeOrmModule.forFeature([WalletBalance, UserConfig, LiquidityHistory]),
     forwardRef(() => UserModule),
-    PoolMonitoringModule
+    PoolMonitoringModule,
   ],
   controllers: [LiquidityController],
-  providers: [LiquidityService, RaydiumClmmService, LiquidityTaskService],
+  providers: [
+    LiquidityService,
+    RaydiumClmmService,
+    LiquidityTaskService,
+    ElizaAgentService,
+  ],
   exports: [LiquidityService],
 })
 export class LiquidityModule {}

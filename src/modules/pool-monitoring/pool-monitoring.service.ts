@@ -10,7 +10,7 @@ export class PoolMonitoringService {
 
   async getCurrentPrice(poolId: string): Promise<number> {
     try {
-      const poolInfo = await this.getCurrentPoolStats(poolId);
+      const poolInfo = await this.getDynamicPoolParams(poolId);
       if (!poolInfo?.price) {
         throw new Error('Price not found in pool info');
       }
@@ -24,47 +24,48 @@ export class PoolMonitoringService {
     }
   }
 
-  async getCurrentPoolStats(poolId: string): Promise<PoolStatsDto> {
-    try {
-      const poolInfo = await this.raydiumApiService.fetchPoolInfo(poolId);
-      if (!poolInfo?.price || !poolInfo?.tvl || !poolInfo?.day) {
-        throw new Error('Incomplete pool info');
-      }
-
-      return {
-        price: poolInfo.price,
-        poolId: poolInfo.id,
-        liquidity: poolInfo.tvl,
-        volume24h: poolInfo.day.volumeQuote,
-        fees24h: poolInfo.day.volumeFee,
-      };
-    } catch (error) {
-      this.logger.error(
-        `Error getting pool stats: ${error.message}`,
-        error.stack,
-      );
-      throw new NotFoundException('Could not fetch pool stats');
-    }
-  }
-
   async getDynamicPoolParams(poolId: string): Promise<PoolDynamicParamsDto> {
     try {
       const poolInfo = await this.raydiumApiService.fetchPoolInfo(poolId);
       if (!poolInfo?.price || !poolInfo?.tvl || !poolInfo?.day) {
         throw new Error('Incomplete pool info');
       }
-
+  
       return {
+        poolId: poolInfo.id,
+        tokenA: {
+          symbol: poolInfo.mintA.symbol,
+          mint: poolInfo.mintA.address,
+          decimals: poolInfo.mintA.decimals,
+        },
+        tokenB: {
+          symbol: poolInfo.mintB.symbol,
+          mint: poolInfo.mintB.address,
+          decimals: poolInfo.mintB.decimals,
+        },
         price: poolInfo.price,
         mintAmountA: poolInfo.mintAmountA,
         mintAmountB: poolInfo.mintAmountB,
         feeRate: poolInfo.feeRate,
         tvl: poolInfo.tvl,
+  
         volume24h: poolInfo.day.volumeQuote,
         volumeFee24h: poolInfo.day.volumeFee,
         apr24h: poolInfo.day.apr,
         priceMin24h: poolInfo.day.priceMin,
         priceMax24h: poolInfo.day.priceMax,
+  
+        volume7d: poolInfo.week.volumeQuote,
+        volumeFee7d: poolInfo.week.volumeFee,
+        apr7d: poolInfo.week.apr,
+        priceMin7d: poolInfo.week.priceMin,
+        priceMax7d: poolInfo.week.priceMax,
+  
+        volume30d: poolInfo.month.volumeQuote,
+        volumeFee30d: poolInfo.month.volumeFee,
+        apr30d: poolInfo.month.apr,
+        priceMin30d: poolInfo.month.priceMin,
+        priceMax30d: poolInfo.month.priceMax,
       };
     } catch (error) {
       this.logger.error(
@@ -74,4 +75,5 @@ export class PoolMonitoringService {
       throw new NotFoundException('Could not fetch dynamic pool parameters');
     }
   }
+  
 }

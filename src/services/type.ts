@@ -1,51 +1,75 @@
 export namespace Raydium {
-  // 定义池子信息类型
-  export type PoolInfo = {
+  export interface TokenInfo {
+    chainId: number;
+    address: string;
+    programId: string;
+    logoURI: string;
+    symbol: string;
+    name: string;
+    decimals: number;
+    tags: string[];
+    extensions: Record<string, unknown>;
+  }
+
+  export interface PoolPeriodStats {
+    volume: number;
+    volumeQuote: number;
+    volumeFee: number;
+    apr: number;
+    feeApr: number;
+    priceMin: number;
+    priceMax: number;
+    rewardApr: any[]; // 可进一步细化结构，如有例子的话
+  }
+
+  export interface PoolConfig {
+    id: string;
+    index: number;
+    protocolFeeRate: number;
+    tradeFeeRate: number;
+    tickSpacing: number;
+    fundFeeRate: number;
+    defaultRange: number;
+    defaultRangePoint: number[];
+  }
+
+  export interface PoolInfo {
     type: string;
     programId: string;
     id: string;
-    mintA: any;
-    mintB: any;
+    mintA: TokenInfo;
+    mintB: TokenInfo;
     rewardDefaultPoolInfos: string;
-    rewardDefaultInfos: any[];
-    price: number;  // 价格字段
+    rewardDefaultInfos: any[]; // 同样可进一步细化
+    price: number;
     mintAmountA: number;
     mintAmountB: number;
     feeRate: number;
     openTime: string;
     tvl: number;
-    day: {
-      volume: number;
-      volumeQuote: number;
-      volumeFee: number;
-      apr: number;
-      feeApr: number;
-      priceMin: number;
-      priceMax: number;
-      rewardApr: any[];
-    };
-    week: any;
-    month: any;
-    pooltype: any[];
+    day: PoolPeriodStats;
+    week: PoolPeriodStats;
+    month: PoolPeriodStats;
+    pooltype: string[];
     farmUpcomingCount: number;
     farmOngoingCount: number;
     farmFinishedCount: number;
-    config: any;
+    config: PoolConfig;
     burnPercent: number;
-  };
+    launchMigratePool: boolean;
+  }
 
-  // 响应类型，直接返回data字段
-  export type PoolInfoResponse = {
+  export interface PoolInfoResponse {
     id: string;
     success: boolean;
-    data: PoolInfo[];  // 返回池子数据数组
-  };
+    data: PoolInfo[];
+  }
 
-  // mint价格的接口类型
-  export type MintPriceResponse = {
-    [mint: string]: number; // mint 地址对应的价格
-  };
+  export interface MintPriceResponse {
+    [mint: string]: number;
+  }
 }
+
 
 export interface ComputeLiquidityResult {
   swap: {

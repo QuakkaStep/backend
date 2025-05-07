@@ -71,14 +71,6 @@ export class LiquidityService {
       const upThreshold = triggeredPrice * (1 + stepPercentage / 100);
       const downThreshold = triggeredPrice * (1 - stepPercentage / 100);
 
-      this.logger.debug(
-        `Checking liquidity for ${publicKey} at price ${currentPrice}, stepPercentage: ${stepPercentage}, triggeredPrice: ${triggeredPrice}`,
-      );
-
-      this.logger.debug(
-        `upThreshold: ${upThreshold}, downThreshold: ${downThreshold}`,
-      );
-
       if (currentPrice >= upThreshold || currentPrice <= downThreshold) {
         const res = await this.increaseSingleSidedLiquidity(publicKey);
 

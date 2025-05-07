@@ -10,8 +10,6 @@ export class LiquidityTaskService {
 
   @Interval(5000)
   async checkAndTriggerLiquidityForAll() {
-    this.logger.debug('Checking and triggering liquidity...');
-
     await this.liquidityService.checkAndTriggerAutoLiquidity();
   }
 }

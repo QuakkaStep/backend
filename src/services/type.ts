@@ -72,6 +72,7 @@ export namespace Raydium {
 
 
 export interface ComputeLiquidityResult {
+  
   swap: {
     inputTokenAmount: number;
     inputTokenFee: number;

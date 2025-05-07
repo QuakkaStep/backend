@@ -5,11 +5,6 @@ import { LiquidityService } from './liquidity.service';
 export class LiquidityController {
   constructor(private readonly liquidityService: LiquidityService) {}
 
-  @Get('increase')
-  async getLiquidityPreview(@Query('publicKey') publicKey: string) {
-    return this.liquidityService.increaseSingleSidedLiquidity(publicKey);
-  }
-
   @Get('history')
   async getHistory(
     @Query('publicKey') publicKey: string,

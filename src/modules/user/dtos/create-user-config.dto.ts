@@ -6,16 +6,20 @@ import {
   IsString,
 } from 'class-validator';
 
-export class CreateUserConfigDto {
+export class InitUserConfigDto {
   @IsNotEmpty()
   @IsString()
   publicKey: string;
+
+  @IsNotEmpty()
+  @IsString()
+  poolId: string;
 
   @IsDecimal()
   stepPercentage: number;
 
   @IsDecimal()
-  addLiquidityAmount: number;
+  perAddedLiquidity: number;
 
   @IsDecimal()
   minPrice: number;

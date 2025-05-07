@@ -8,13 +8,17 @@ export class PoolMonitoringService {
 
   constructor(private readonly raydiumApiService: RaydiumApiService) {}
 
-  async getCurrentPrice(poolId: string): Promise<number> {
+  async getTokenInfo(poolId: string) {
     try {
       const poolInfo = await this.getDynamicPoolParams(poolId);
       if (!poolInfo?.price) {
         throw new Error('Price not found in pool info');
       }
-      return poolInfo.price;
+      return {
+        price: poolInfo.price,
+        symbol: poolInfo.tokenB.symbol,
+        tokenAddr: poolInfo.tokenB.mint,
+      };
     } catch (error) {
       this.logger.error(
         `Error getting current price: ${error.message}`,
@@ -30,7 +34,7 @@ export class PoolMonitoringService {
       if (!poolInfo?.price || !poolInfo?.tvl || !poolInfo?.day) {
         throw new Error('Incomplete pool info');
       }
-  
+
       return {
         poolId: poolInfo.id,
         tokenA: {
@@ -48,19 +52,19 @@ export class PoolMonitoringService {
         mintAmountB: poolInfo.mintAmountB,
         feeRate: poolInfo.feeRate,
         tvl: poolInfo.tvl,
-  
+
         volume24h: poolInfo.day.volumeQuote,
         volumeFee24h: poolInfo.day.volumeFee,
         apr24h: poolInfo.day.apr,
         priceMin24h: poolInfo.day.priceMin,
         priceMax24h: poolInfo.day.priceMax,
-  
+
         volume7d: poolInfo.week.volumeQuote,
         volumeFee7d: poolInfo.week.volumeFee,
         apr7d: poolInfo.week.apr,
         priceMin7d: poolInfo.week.priceMin,
         priceMax7d: poolInfo.week.priceMax,
-  
+
         volume30d: poolInfo.month.volumeQuote,
         volumeFee30d: poolInfo.month.volumeFee,
         apr30d: poolInfo.month.apr,
@@ -75,5 +79,4 @@ export class PoolMonitoringService {
       throw new NotFoundException('Could not fetch dynamic pool parameters');
     }
   }
-  
 }

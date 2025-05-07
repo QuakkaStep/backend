@@ -9,6 +9,9 @@ export class LiquidityHistory {
   @Column('varchar')
   publicKey: string;
 
+  @Column('varchar')
+  poolId: string;
+
   @Column('decimal', { precision: 18, scale: 8 })
   price: number;
 

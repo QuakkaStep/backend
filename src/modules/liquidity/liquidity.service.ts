@@ -1,25 +1,21 @@
-// src/modules/liquidity/liquidity.service.ts
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PublicKey } from '@solana/web3.js';
-import { RaydiumClmmService } from 'src/services/raydium.clmm.service';
-import { WalletBalance } from '../user/entities/wallet-balance.entity';
-import { Repository } from 'typeorm';
-import { UserService } from '../user/user.service';
-import { UserConfig } from '../user/entities/user-config.entity';
-import { SOL_MINT, TRUMP_MINT } from '../common/utils';
-import { ComputeLiquidityResult } from 'src/services/type';
-import { LiquidityHistory } from './entities/liquidity-history.entity';
-import { PoolMonitoringService } from '../pool-monitoring/pool-monitoring.service';
 import { ElizaAgentService } from 'src/services/eliza-agent.service';
-import { fromSmallestUnit } from 'src/shared/utils';
+import { RaydiumClmmService } from 'src/services/raydium.clmm.service';
+import { ComputeLiquidityResult } from 'src/services/type';
+import { Repository } from 'typeorm';
+import { SOL_MINT, TRUMP_MINT } from '../common/utils';
+import { PoolMonitoringService } from '../pool-monitoring/pool-monitoring.service';
+import { UserConfig } from '../user/entities/user-config.entity';
+import { UserService } from '../user/user.service';
 import { ConfigResponseDto } from './dtos/config-response.dto';
+import { LiquidityHistory } from './entities/liquidity-history.entity';
 
 @Injectable()
 export class LiquidityService {
   private readonly logger = new Logger(LiquidityService.name);
-  private readonly trumpSolPoolId: string;
 
   constructor(
     @InjectRepository(UserConfig)
@@ -32,12 +28,7 @@ export class LiquidityService {
     private readonly userService: UserService,
     private readonly configService: ConfigService,
     private readonly elizaAgentService: ElizaAgentService,
-  ) {
-    this.trumpSolPoolId = this.configService.get<string>(
-      'POOL_ID',
-      'GQsPr4RJk9AZkkfWHud7v4MtotcxhaYzZHdsPCg9vNvW',
-    );
-  }
+  ) {}
 
   async getLiquidityHistory(publicKey: string, limit = 20) {
     return this.liquidityHistoryRepository.find({
@@ -47,80 +38,104 @@ export class LiquidityService {
     });
   }
 
-  async checkAndTriggerAutoLiquidity() {
-    const activeUsers = await this.userConfigRepository.find({
+  async timedCheckAddLiquidity() {
+    const activeConfigs = await this.userConfigRepository.find({
       where: { status: 'active' },
     });
-    if (activeUsers.length === 0) return;
+    if (activeConfigs.length === 0) return;
 
-    const currentPrice = await this.poolMonitoringService.getCurrentPrice(
-      this.trumpSolPoolId,
-    );
-    if (!currentPrice) return;
-
-    for (const userConfig of activeUsers) {
+    for (const config of activeConfigs) {
       const {
         publicKey,
+        poolId,
         stepPercentage,
         triggeredPrice,
-        addLiquidityAmount,
+        perAddedLiquidity,
         minPrice,
         maxPrice,
-      } = userConfig;
+      } = config;
+
+      const {
+        price: curTokenPrice,
+        symbol,
+        tokenAddr,
+      } = await this.poolMonitoringService.getTokenInfo(poolId);
+
+      const isValidPrice =
+        curTokenPrice >= minPrice && curTokenPrice <= maxPrice;
+
+      if (!isValidPrice) {
+        await this.userConfigRepository.update(config.id, {
+          status: 'paused',
+        });
+        this.logger.log(
+          `[Auto LP] ❌ ${publicKey} ${symbol} at ${curTokenPrice} is out of range [${minPrice}, ${maxPrice}]`,
+        );
+        continue;
+      }
 
       const upThreshold = triggeredPrice * (1 + stepPercentage / 100);
       const downThreshold = triggeredPrice * (1 - stepPercentage / 100);
 
-      if (currentPrice >= upThreshold || currentPrice <= downThreshold) {
-        const res = await this.increaseSingleSidedLiquidity(publicKey);
-
-        userConfig.triggeredPrice = currentPrice;
-        await this.userConfigRepository.save(userConfig);
-
-        await this.liquidityHistoryRepository.save({
+      if (
+        triggeredPrice == 0 || // first add liquidity
+        curTokenPrice >= upThreshold ||
+        curTokenPrice <= downThreshold
+      ) {
+        await this.increaseSingleSidedLiquidity(
           publicKey,
-          price: currentPrice,
-          solAmount: res.addLiquidity.solAmount,
-          tokenAmount: res.addLiquidity.tokenAmount,
-          swapTokenAmount: res.swap.inputTokenAmount,
-          minPrice,
-          maxPrice,
-        });
+          tokenAddr,
+          poolId,
+          curTokenPrice,
+        );
 
-        this.logger.log(`[Auto LP] ✅ ${publicKey} at ${currentPrice}`);
+        await this.userConfigRepository.update(config.id, {
+          triggeredPrice: curTokenPrice,
+        });
       }
     }
   }
 
-  async increaseSingleSidedLiquidity(publicKey: string) {
-    // fetch the user's config
+  private async increaseSingleSidedLiquidity(
+    publicKey: string,
+    tokenAddr: string,
+    poolId: string,
+    curTokenPrice?: number,
+  ) {
     const userConfig = await this.userConfigRepository.findOne({
-      where: { publicKey },
+      where: { publicKey, poolId },
     });
     if (!userConfig) {
-      throw new Error('User config not found');
+      throw new Error(`User ${publicKey} config not found`);
     }
-    const { minPrice, maxPrice, addLiquidityAmount: amount } = userConfig;
+    const { minPrice, maxPrice, perAddedLiquidity } = userConfig;
 
-    this.logger.debug(`userConfig: ${JSON.stringify(userConfig)}`);
-
-    const increaseRes =
+    const increaseLiquidityRes =
       await this.raydiumClmmService.computeSingleSidedLiquidity(
         new PublicKey(publicKey),
-        amount,
+        perAddedLiquidity,
         minPrice,
         maxPrice,
+        poolId,
       );
 
-    this.logger.debug(`increaseRes: ${JSON.stringify(increaseRes, null, 2)}`);
+    await this.updateBalances(publicKey, tokenAddr, increaseLiquidityRes);
 
-    await this.updateBalancesAfterLiquidityAdd(publicKey, increaseRes);
-
-    return increaseRes;
+    await this.liquidityHistoryRepository.save({
+      publicKey,
+      poolId,
+      price: curTokenPrice,
+      solAmount: increaseLiquidityRes.addLiquidity.solAmount,
+      tokenAmount: increaseLiquidityRes.addLiquidity.tokenAmount,
+      swapTokenAmount: increaseLiquidityRes.swap.inputTokenAmount,
+      minPrice,
+      maxPrice,
+    });
   }
 
-  private async updateBalancesAfterLiquidityAdd(
+  private async updateBalances(
     publicKey: string,
+    tokenAddr: string,
     increaseRes: ComputeLiquidityResult,
   ) {
     // Update SOL balance
@@ -133,34 +148,34 @@ export class LiquidityService {
       solBalance +
       (increaseRes.swap.outputSolAmount - increaseRes.addLiquidity.solAmount);
 
-    this.logger.debug(
-      `[updateBalancesAfterLiquidityAdd] solBalance: ${solBalance}, newSolBalance: ${newSolBalance}`,
-    );
-
     await this.userService.updateWalletBalance(
       publicKey,
       SOL_MINT,
       newSolBalance,
     );
 
+    this.logger.debug(
+      `Updated SOL balance: ${solBalance} --> ${newSolBalance}`,
+    );
+
     // Update token balance
-    const trumpBalance = await this.userService.getBalanceByToken(
+    const tokenBalance = await this.userService.getBalanceByToken(
       publicKey,
-      TRUMP_MINT,
+      tokenAddr,
     );
     const inputTokenAmount = Number(increaseRes.swap.inputTokenAmount);
     const addTokenAmount = Number(increaseRes.addLiquidity.tokenAmount);
 
-    const newTrumpBalance = trumpBalance - (inputTokenAmount + addTokenAmount);
+    const newTokenBalance = tokenBalance - (inputTokenAmount + addTokenAmount);
 
     await this.userService.updateWalletBalance(
       publicKey,
-      TRUMP_MINT,
-      newTrumpBalance,
+      tokenAddr,
+      newTokenBalance,
     );
 
     this.logger.debug(
-      `Updated wallet balance: SOL ${newSolBalance}, TRUMP ${newTrumpBalance}`,
+      `Updated token balance: ${tokenBalance} --> ${newTokenBalance}`,
     );
   }
 

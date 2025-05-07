@@ -1,5 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
-import { Wallet } from './wallet.entity';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn
+} from 'typeorm';
 
 @Entity('user_configs')
 export class UserConfig {
@@ -9,14 +14,14 @@ export class UserConfig {
   @Column({ type: 'varchar', length: 100 })
   publicKey: string;
 
+  @Column({ type: 'varchar', length: 100 })
+  poolId: string;
+
   @Column({ type: 'decimal', precision: 5, scale: 2 })
   stepPercentage: number;
 
   @Column({ type: 'decimal', precision: 18, scale: 8 })
-  addLiquidityAmount: number;
-
-  @Column({ type: 'decimal', precision: 5, scale: 2 })
-  priceRange: number;
+  perAddedLiquidity: number;
 
   @Column({ type: 'decimal', precision: 18, scale: 8, default: 0 })
   triggeredPrice: number;

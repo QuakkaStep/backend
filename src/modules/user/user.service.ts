@@ -1,12 +1,14 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CreateUserConfigDto } from './dtos/create-user-config.dto';
-import { Wallet } from './entities/wallet.entity';
 import { generateSolanaWallet, SOL_MINT, TRUMP_MINT } from '../common/utils';
+import { LiquidityService } from '../liquidity/liquidity.service';
+import {
+  InitUserConfigDto
+} from './dtos/create-user-config.dto';
 import { UserConfig } from './entities/user-config.entity';
 import { WalletBalance } from './entities/wallet-balance.entity';
-import { LiquidityService } from '../liquidity/liquidity.service';
+import { Wallet } from './entities/wallet.entity';
 
 @Injectable()
 export class UserService {
@@ -22,21 +24,28 @@ export class UserService {
     private readonly liquidityService: LiquidityService,
   ) {}
 
-  async saveConfig(createUserConfigDto: CreateUserConfigDto) {
-    const userIsExist = await this.userIsExist(createUserConfigDto.publicKey);
+  async saveConfig(config: InitUserConfigDto) {
+    const userIsExist = await this.userIsExist(config.publicKey);
     if (!userIsExist) {
-      this.logger.error('[saveConfig] User already exists');
       throw new BadRequestException(
-        'Wallet not found. Please generate wallet first.',
+        `wallet ${config.publicKey} not generated on this server`,
       );
     }
-    const userConfig = this.userConfigRepository.create(createUserConfigDto);
-    userConfig.priceRange =
-      createUserConfigDto.maxPrice - createUserConfigDto.minPrice;
+
+    const configIsExist = await this.userConfigRepository.exists({
+      where: { publicKey: config.publicKey, poolId: config.poolId },
+    });
+
+    if (configIsExist) {
+      throw new BadRequestException(
+        `user config for ${config.publicKey} already exists`,
+      );
+    }
+
+    const userConfig = this.userConfigRepository.create(config);
     await this.userConfigRepository.save(userConfig);
-    return this.liquidityService.increaseSingleSidedLiquidity(
-      createUserConfigDto.publicKey,
-    );
+
+    return userConfig;
   }
 
   async generateWallet() {

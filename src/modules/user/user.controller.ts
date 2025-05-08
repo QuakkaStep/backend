@@ -16,8 +16,13 @@ export class UserController {
     return this.userService.generateWallet();
   }
 
-  @Get('portfolio')
+  @Get('token-balance')
   async getWalletTokenHold(@Query('publicKey') publicKey: string) {
     return this.userService.getAllTokenBalances(publicKey);
+  }
+
+  @Get('portfolio')
+  async getPortfolio(@Query('publicKey') publicKey: string) {
+    return this.userService.getFullPortfolio(publicKey);
   }
 }

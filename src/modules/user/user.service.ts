@@ -1,14 +1,21 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { generateSolanaWallet, SOL_MINT, TRUMP_MINT } from '../common/utils';
-import { LiquidityService } from '../liquidity/liquidity.service';
 import {
-  InitUserConfigDto
-} from './dtos/create-user-config.dto';
+  calculateDeltaL,
+  calculateUserAprAndFee,
+  generateSolanaWallet,
+  SOL_MINT,
+  TRUMP_MINT,
+} from '../common/utils';
+import { LiquidityService } from '../liquidity/liquidity.service';
+import { InitUserConfigDto } from './dtos/create-user-config.dto';
 import { UserConfig } from './entities/user-config.entity';
 import { WalletBalance } from './entities/wallet-balance.entity';
 import { Wallet } from './entities/wallet.entity';
+import { LiquidityHistory } from '../liquidity/entities/liquidity-history.entity';
+import { RaydiumApiService } from 'src/services/raydium.api.service';
+import { PortfolioItem } from './types';
 
 @Injectable()
 export class UserService {
@@ -21,7 +28,9 @@ export class UserService {
     private readonly walletRepo: Repository<Wallet>,
     @InjectRepository(WalletBalance)
     private readonly walletBalanceRepo: Repository<WalletBalance>,
-    private readonly liquidityService: LiquidityService,
+    @InjectRepository(LiquidityHistory)
+    private readonly liquidityHistoryRepo: Repository<LiquidityHistory>,
+    private readonly raydiumApiService: RaydiumApiService,
   ) {}
 
   async saveConfig(config: InitUserConfigDto) {
@@ -142,5 +151,85 @@ export class UserService {
     }
 
     return balances;
+  }
+
+  async getFullPortfolio(publicKey: string): Promise<PortfolioItem[]> {
+    const histories = await this.liquidityHistoryRepo.find({
+      where: { publicKey },
+    });
+
+    // 分组 histories（按 poolId）
+    const grouped = histories.reduce(
+      (acc, record) => {
+        if (!acc[record.poolId]) acc[record.poolId] = [];
+        acc[record.poolId].push(record);
+        return acc;
+      },
+      {} as Record<string, LiquidityHistory[]>,
+    );
+
+    const solPrice = await this.raydiumApiService.fetchTokenPrice(SOL_MINT);
+
+    const results: PortfolioItem[] = [];
+
+    for (const poolId of Object.keys(grouped)) {
+      const poolHistories = grouped[poolId];
+      const poolResult = await this.calcUserAprForPool(
+        poolId,
+        poolHistories,
+        solPrice,
+      );
+      results.push({ poolId, ...poolResult });
+    }
+
+    return results;
+  }
+
+  private async calcUserAprForPool(
+    poolId: string,
+    histories: LiquidityHistory[],
+    solPrice: number,
+  ) {
+    let totalTokenAmount = 0;
+    let totalSolAmount = 0;
+
+    for (const record of histories) {
+      totalTokenAmount += Number(record.tokenAmount);
+      totalSolAmount += Number(record.solAmount);
+    }
+
+    const minPrice = Number(histories[0].minPrice);
+    const maxPrice = Number(histories[0].maxPrice);
+
+    const currentPrice = 1 / Number(histories[histories.length - 1].price);
+    const tokenPriceInUsd = currentPrice * solPrice;
+    const tokenUpPrice = (1 / minPrice) * solPrice;
+    const tokenDownPrice = (1 / maxPrice) * solPrice;
+
+    const deltaL = calculateDeltaL(
+      totalSolAmount,
+      totalTokenAmount,
+      tokenUpPrice,
+      tokenDownPrice,
+      tokenPriceInUsd,
+    );
+
+    const poolInfo = await this.raydiumApiService.fetchPoolInfo(poolId);
+    const userTotalValueUSD =
+      totalSolAmount * solPrice + totalTokenAmount * tokenPriceInUsd;
+
+    const { userApr, expectedDailyFee } = calculateUserAprAndFee(
+      deltaL,
+      poolInfo.tvl,
+      poolInfo.day.volume,
+      poolInfo.feeRate,
+      userTotalValueUSD,
+    );
+
+    return {
+      userApr,
+      expectedDailyFee,
+      userTotalValueUSD,
+    };
   }
 }

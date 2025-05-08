@@ -9,10 +9,10 @@ import {
   TxVersion,
 } from '@raydium-io/raydium-sdk-v2';
 import { ConfigService } from '@nestjs/config';
-import { fromSmallestUnit, toSmallestUnit } from 'src/shared/utils';
 import Decimal from 'decimal.js';
 import { BN } from 'bn.js';
 import { ComputeLiquidityResult, createDefaultLiquidityResult } from './type';
+import { fromSmallestUnit, toSmallestUnit } from 'src/modules/common/utils';
 
 @Injectable()
 export class RaydiumClmmService {

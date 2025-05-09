@@ -11,6 +11,7 @@ import { LiquidityTaskService } from './task.service';
 import { PoolMonitoringModule } from '../pool-monitoring/pool-monitoring.module';
 import { ElizaAgentService } from 'src/services/eliza-agent.service';
 import { HttpModule } from '@nestjs/axios';
+import { RaydiumApiService } from 'src/services/raydium.api.service';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { HttpModule } from '@nestjs/axios';
     RaydiumClmmService,
     LiquidityTaskService,
     ElizaAgentService,
+    RaydiumApiService
   ],
   exports: [LiquidityService],
 })

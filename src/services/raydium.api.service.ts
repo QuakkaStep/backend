@@ -19,33 +19,51 @@ export class RaydiumApiService {
     );
   }
 
-  async fetchPoolInfo(poolId: string): Promise<Raydium.PoolInfo> {
-    try {
-      const url = `${this.raydiumApiUrl}/pools/info/ids?ids=${poolId}`;
-      const response = await firstValueFrom(this.httpService.get(url));
-      const poolInfo = response.data.data[0];
-      if (!poolInfo) {
-        throw new Error('Pool info not found');
+  private async fetchWithRetry<T>(
+    url: string,
+    retries = 3,
+    delayMs = 1000,
+  ): Promise<T> {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const response = await firstValueFrom(this.httpService.get(url));
+        return response.data;
+      } catch (error) {
+        this.logger.warn(
+          `Request failed (attempt ${attempt}/${retries}): ${url}`,
+        );
+        if (attempt === retries) {
+          this.logger.error(`Failed after ${retries} retries`, error);
+          throw new Error(`Request failed after ${retries} retries`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
-      return poolInfo;
-    } catch (error) {
-      this.logger.error('Error fetching pool info', error);
-      throw new Error('Error fetching pool info');
     }
+
+    throw new Error('Unexpected error in fetchWithRetry');
+  }
+
+  async fetchPoolInfo(poolId: string): Promise<Raydium.PoolInfo> {
+    const url = `${this.raydiumApiUrl}/pools/info/ids?ids=${poolId}`;
+    const data = await this.fetchWithRetry<{ data: Raydium.PoolInfo[] }>(url);
+    const poolInfo = data.data[0];
+    if (!poolInfo) throw new Error('Pool info not found');
+    return poolInfo;
   }
 
   async fetchTokenPrice(mint: string): Promise<number> {
-    try {
-      const url = `${this.raydiumApiUrl}/mint/price?mints=${mint}`;
-      const response = await firstValueFrom(this.httpService.get(url));
-      const price = response.data?.data?.[mint];
-      if (!price) {
-        throw new Error(`Price for token ${mint} not found`);
-      }
-      return price;
-    } catch (error) {
-      this.logger.error(`Error fetching price for mint ${mint}`, error);
-      throw new Error(`Error fetching price for mint ${mint}`);
-    }
+    const url = `${this.raydiumApiUrl}/mint/price?mints=${mint}`;
+    const data = await this.fetchWithRetry<{ data: Record<string, number> }>(
+      url,
+    );
+    const price = data?.data?.[mint];
+    if (!price) throw new Error(`Price for token ${mint} not found`);
+    return price;
+  }
+
+  async fetchTokenInfo(tokenAddr: string): Promise<Raydium.TokenInfo> {
+    const url = `${this.raydiumApiUrl}/mint/ids?mints=${tokenAddr}`;
+    const data = await this.fetchWithRetry<{ data: Raydium.TokenInfo }>(url);
+    return data.data;
   }
 }

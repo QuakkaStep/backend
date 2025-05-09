@@ -13,8 +13,11 @@ export class LiquidityController {
     return this.liquidityService.getLiquidityHistory(publicKey, limit);
   }
 
-  @Get('ai-config-recommender')
-  async getAiConfigRecommender(@Query('publicKey') publicKey: string) {
-    return this.liquidityService.getAiConfigRecommender(publicKey);
+  @Get('ai-config-generation')
+  async aiConfigGeneration(
+    @Query('publicKey') publicKey: string,
+    @Query('tokenAddress') tokenAddress: string,
+  ) {
+    return this.liquidityService.aiConfigGeneration(publicKey, tokenAddress);
   }
 }

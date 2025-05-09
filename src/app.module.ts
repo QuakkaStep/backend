@@ -15,8 +15,8 @@ import { ScheduleModule } from '@nestjs/schedule';
 @Module({
   imports: [
     HttpModule.register({
-      timeout: 60 * 1000,
-      maxRedirects: 5,
+      timeout: 10 * 1000,
+      maxRedirects: 10,
       global: true,
     }),
     ScheduleModule.forRoot(),

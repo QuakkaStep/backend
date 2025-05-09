@@ -158,7 +158,6 @@ export class UserService {
       where: { publicKey },
     });
 
-    // 分组 histories（按 poolId）
     const grouped = histories.reduce(
       (acc, record) => {
         if (!acc[record.poolId]) acc[record.poolId] = [];

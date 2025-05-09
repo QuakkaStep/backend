@@ -1,4 +1,10 @@
-import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  forwardRef,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { PublicKey } from '@solana/web3.js';
@@ -12,6 +18,7 @@ import { UserConfig } from '../user/entities/user-config.entity';
 import { UserService } from '../user/user.service';
 import { ConfigResponseDto } from './dtos/config-response.dto';
 import { LiquidityHistory } from './entities/liquidity-history.entity';
+import { RaydiumApiService } from 'src/services/raydium.api.service';
 
 @Injectable()
 export class LiquidityService {
@@ -28,6 +35,7 @@ export class LiquidityService {
     private readonly userService: UserService,
     private readonly configService: ConfigService,
     private readonly elizaAgentService: ElizaAgentService,
+    private readonly raydiumApiService: RaydiumApiService,
   ) {}
 
   async getLiquidityHistory(publicKey: string, limit = 20) {
@@ -77,11 +85,28 @@ export class LiquidityService {
       const upThreshold = triggeredPrice * (1 + stepPercentage / 100);
       const downThreshold = triggeredPrice * (1 - stepPercentage / 100);
 
-      if (
-        triggeredPrice == 0 || // first add liquidity
+      const shouldTrigger =
+        triggeredPrice === 0 ||
         curTokenPrice >= upThreshold ||
-        curTokenPrice <= downThreshold
-      ) {
+        curTokenPrice <= downThreshold;
+
+      this.logger.debug(
+        `shouldTrigger: ${shouldTrigger}, triggeredPrice: ${triggeredPrice}, curTokenPrice: ${curTokenPrice}, upThreshold: ${upThreshold}, downThreshold: ${downThreshold}`,
+      );
+
+      if (shouldTrigger) {
+        if (Number(triggeredPrice) !== 0) {
+          const configDto = await this.aiConfigGeneration(publicKey, tokenAddr);
+          await this.userConfigRepository.update(config.id, {
+            stepPercentage: configDto.stepPercentage,
+            perAddedLiquidity: configDto.addLiquidityAmount,
+          });
+
+          this.logger.log(
+            `[Auto LP][AI Config] 🤖 Updated config for ${publicKey}: step=${configDto.stepPercentage}, amount=${configDto.addLiquidityAmount}`,
+          );
+        }
+
         await this.increaseSingleSidedLiquidity(
           publicKey,
           tokenAddr,
@@ -179,23 +204,26 @@ export class LiquidityService {
     );
   }
 
-  async getAiConfigRecommender(publicKey: string): Promise<ConfigResponseDto> {
+  async aiConfigGeneration(
+    publicKey: string,
+    tokenAddr: string,
+  ): Promise<ConfigResponseDto> {
     const tokenAmount = await this.userService.getBalanceByToken(
       publicKey,
-      TRUMP_MINT,
+      tokenAddr,
     );
 
-    this.logger.debug(`[getAiConfigRecommender] Token amount: ${tokenAmount}`);
+    const tokenInfo = await this.raydiumApiService.fetchTokenInfo(tokenAddr);
 
-    const recommendedConfig = await this.elizaAgentService.sendMessageToAgent(
+    const recommendedConfig = await this.elizaAgentService.sendMsg(
       tokenAmount,
-      'TRUMP',
+      tokenInfo.symbol,
     );
 
     return {
       walletAddress: publicKey,
       tokenAmount: tokenAmount,
-      tokenSymbol: 'TRUMP',
+      tokenSymbol: tokenInfo.symbol,
       ...recommendedConfig,
     };
   }
